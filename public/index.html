@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoQuest</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    #game-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .loading {
+      color: white;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: Arial;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div class="loading">Cargando EcoQuest...</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  
+  <script src="../src/scenes/menuScene.js"></script>
+  <script src="../src/scenes/baseLevelScene.js"></script>
+  <script src="../src/scenes/levelScenes.js"></script>
+  <script src="../src/scenes/enemy.js"></script>
+  <script src="../src/game.js"></script>
+  <script>
+    window.addEventListener('load', function() {
+      document.querySelector('.loading').style.display = 'none';
+    });
+  </script>
+</body>
+</html>

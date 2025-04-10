@@ -1,5 +1,5 @@
 **Titulo**
-# Ecoguest
+# Ecoquest
 EcoQuest es un videojuego educativo y de aventuras que sumerge al jugador en un mundo afectado por el cambio climático.
 **Problematica**
 El objetivo es resolver misiones y puzzles relacionados con la sostenibilidad, mientras se aprenden conceptos clave sobre ecología, energías renovables, reciclaje y conservación. El juego combina entretenimiento con educación, motivando a los jugadores a adoptar hábitos sostenibles en la vida real.

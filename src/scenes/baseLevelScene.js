@@ -17,6 +17,7 @@ class BaseLevelScene extends Phaser.Scene {
     gameState.enemies.forEach(enemy => enemy.destroy());
     gameState.enemies = [];
     
+    
     this.resetGameState();
     this.setupBackground();
     this.createPlayer();
@@ -26,6 +27,8 @@ class BaseLevelScene extends Phaser.Scene {
     this.createCounters();
     this.createLivesHUD();
     this.setupResizeHandler();
+    this.createPauseMenu();
+    this.setupPauseKey();
 
     // Colisiones
     this.physics.add.overlap(gameState.player, gameState.enemies, this.hitByEnemy, null, this);
@@ -37,7 +40,102 @@ class BaseLevelScene extends Phaser.Scene {
     gameState.gameOver = false;
     gameState.trashItems = [];
     gameState.currentLevel = this.levelNumber;
+    gameState.lives = 3;
+    gameState.isInvulnerable = false;
   }
+
+  createPauseMenu() {
+    // Crear el menú de pausa (inicialmente invisible)
+    this.pauseMenu = this.add.container();
+    
+    // Fondo semitransparente
+    const bg = this.add.rectangle(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY,
+        this.cameras.main.width,
+        this.cameras.main.height,
+        0x000000,
+        0.7
+    ).setInteractive();
+    
+    // Texto "PAUSA"
+    const pauseText = this.add.text(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY - 100,
+        'PAUSA',
+        {
+            font: '64px Arial',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }
+    ).setOrigin(0.5);
+    
+    // Botón de continuar
+    const continueButton = this.add.text(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY,
+        'Continuar',
+        {
+            font: '32px Arial',
+            fill: '#ffffff',
+            backgroundColor: '#74ff33',
+            padding: { x: 20, y: 10 }
+        }
+    ).setOrigin(0.5)
+    .setInteractive()
+    .on('pointerdown', () => this.togglePause());
+    
+    // Botón de volver al menú
+    const menuButton = this.add.text(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY + 80,
+        'Volver al Menú',
+        {
+            font: '32px Arial',
+            fill: '#ffffff',
+            backgroundColor: '#ff3333',
+            padding: { x: 20, y: 10 }
+        }
+    ).setOrigin(0.5)
+    .setInteractive()
+    .on('pointerdown', () => {
+        this.scene.stop();
+        this.scene.start('MenuScene');
+    });
+    
+    this.pauseMenu.add([bg, pauseText, continueButton, menuButton]);
+    this.pauseMenu.setVisible(false);
+}
+
+setupPauseKey() {
+    // Configurar la tecla ESC para pausar
+    this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    
+    this.pauseKey.on('down', () => {
+        if (!gameState.gameOver) {
+            this.togglePause();
+        }
+    });
+}
+
+togglePause() {
+    if (gameState.gameOver) return;
+    
+    gameState.isPaused = !gameState.isPaused;
+    
+    if (gameState.isPaused) {
+        // Pausar el juego
+        this.physics.pause();
+        this.pauseMenu.setVisible(true);
+        this.tweens.pauseAll();
+    } else {
+        // Reanudar el juego
+        this.physics.resume();
+        this.pauseMenu.setVisible(false);
+        this.tweens.resumeAll();
+    }
+}
 
   setupBackground() {
     this.background = this.add.image(0, 0, 'background').setOrigin(0, 0);
@@ -105,7 +203,8 @@ class BaseLevelScene extends Phaser.Scene {
     for (let i = 0; i < 3; i++) {
       const heart = this.add.image(60 * i, 0, 'Cplayer')
         .setScale(0.1)
-        .setScrollFactor(0);
+        .setScrollFactor(0)
+        .setVisible(i < gameState.lives); // Solo mostrar corazones activos
       gameState.livesContainer.add(heart);
     }
   }
@@ -131,7 +230,7 @@ class BaseLevelScene extends Phaser.Scene {
   }
 
   update() {
-    if (gameState.gameOver) return;
+    if (gameState.gameOver || gameState.isPaused) return; // No actualizar si está en pausa
 
     gameState.player.setVelocity(0);
 
@@ -153,10 +252,57 @@ class BaseLevelScene extends Phaser.Scene {
     } else {
       gameState.player.alpha = 1;
     }
-  }
+
+    if (gameState.gameOver || !gameState.player?.body) return;
+
+    // Reiniciar velocidad
+    gameState.player.setVelocity(0);
+    gameState.player.setFlipX(false); // Resetear flip al inicio
+
+    // Movimiento horizontal
+    if (gameState.cursors.left.isDown) {
+      gameState.player.setVelocityX(-200);
+      gameState.player.setFlipX(true); // Activar modo espejo (mirando izquierda)
+    } 
+    else if (gameState.cursors.right.isDown) {
+      gameState.player.setVelocityX(200);
+      // FlipX false es la posición normal (mirando derecha)
+    }
+
+    // Movimiento vertical (sin rotación, solo movimiento)
+    if (gameState.cursors.up.isDown) {
+      gameState.player.setVelocityY(-200);
+    } 
+    else if (gameState.cursors.down.isDown) {
+      gameState.player.setVelocityY(200);
+    }
+
+    // Movimiento diagonal (combinación de teclas)
+    if (gameState.cursors.left.isDown && gameState.cursors.up.isDown) {
+      gameState.player.setVelocityX(-180); // Reducir velocidad diagonal
+      gameState.player.setVelocityY(-180);
+    }
+    if (gameState.cursors.right.isDown && gameState.cursors.up.isDown) {
+      gameState.player.setVelocityX(180);
+      gameState.player.setVelocityY(-180);
+    }
+    if (gameState.cursors.left.isDown && gameState.cursors.down.isDown) {
+      gameState.player.setVelocityX(-180);
+      gameState.player.setVelocityY(180);
+    }
+    if (gameState.cursors.right.isDown && gameState.cursors.down.isDown) {
+      gameState.player.setVelocityX(180);
+      gameState.player.setVelocityY(180);
+    }
+}
 
   hitByEnemy(player, enemy) {
+
+    if (gameState.isInvulnerable || gameState.isPaused) return;
+
     if (gameState.isInvulnerable) return;
+
+    if (gameState.gameOver || gameState.isInvulnerable) return;
     
     gameState.lives--;
     gameState.livesContainer.getAt(gameState.lives).setVisible(false);
@@ -215,5 +361,25 @@ class BaseLevelScene extends Phaser.Scene {
       duration: 500,
       ease: 'Back.out'
     });
+  }
+
+  freezeGameObjects() {
+    // Congelar al jugador
+    if (gameState.player && gameState.player.body) {
+      gameState.player.setVelocity(0);
+      gameState.player.body.enable = false; // Desactivar físicas
+      gameState.player.setTint(0x00ff00); // Opcional: efecto visual
+    }
+  
+    // Congelar todos los enemigos
+    gameState.enemies.forEach(enemy => {
+      if (enemy && enemy.body) {
+        enemy.setVelocity(0);
+        enemy.body.enable = false;
+      }
+    });
+  
+    // Desactivar controles
+    gameState.gameOver = true; // Esto evitará que el update procese movimientos
   }
 }

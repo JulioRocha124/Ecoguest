@@ -23,7 +23,8 @@ const gameState = {
   lives: 3,
   enemies: [],
   isInvulnerable: false,
-  invulnerabilityTime: 1000
+  invulnerabilityTime: 1000,
+  ispaused: false
 };
 
 // Inicialización del juego
@@ -36,7 +37,7 @@ const config = {
     default: 'arcade',
     arcade: { 
       gravity: { y: 0 },
-      debug: true
+      debug: false  // activar las hitboxes
     }
   },
   scale: {
@@ -50,13 +51,14 @@ const game = new Phaser.Game(config);
 
 // Funciones de utilidad
 function collectTrash(player, trash) {
-  if (gameState.gameOver) return;
+  if (gameState.gameOver || gameState.ispaused) return;
 
   trash.disableBody(true, true);
   gameState.trashCollected++;
   gameState.trashCounterText.setText(`Basura recogida: ${gameState.trashCollected}`);
 
   if (gameState.trashCollected === gameState.trashItems.length) {
+    this.freezeGameObjects();
     completeLevel.call(this);
   }
 }
@@ -80,6 +82,10 @@ function completeLevel() {
 
   if (gameState.currentLevel < 3) {
     this.time.delayedCall(3000, () => {
+      if (gameState.player && gameState.player.body) {
+        gameState.player.body.enable = true; // Reactivar físicas
+      }
+      gameState.lives = 3;
       gameState.currentLevel++;
       this.scene.start(`Level${gameState.currentLevel}Scene`);
     });

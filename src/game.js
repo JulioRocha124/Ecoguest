@@ -24,7 +24,8 @@ const gameState = {
   enemies: [],
   isInvulnerable: false,
   invulnerabilityTime: 1000,
-  ispaused: false
+  ispaused: false,
+  isInvulnerable: false,
 };
 
 // Inicialización del juego
@@ -37,7 +38,7 @@ const config = {
     default: 'arcade',
     arcade: { 
       gravity: { y: 0 },
-      debug: false  // activar las hitboxes
+      debug: true  // activar las hitboxes
     }
   },
   scale: {
@@ -51,15 +52,18 @@ const game = new Phaser.Game(config);
 
 // Funciones de utilidad
 function collectTrash(player, trash) {
-  if (gameState.gameOver || gameState.ispaused) return;
+  if (gameState.gameOver || gameState.isPaused) return;
 
   trash.disableBody(true, true);
   gameState.trashCollected++;
   gameState.trashCounterText.setText(`Basura recogida: ${gameState.trashCollected}`);
+  
+  // Actualizar el fondo según progreso
+  this.updateBackground();
 
   if (gameState.trashCollected === gameState.trashItems.length) {
-    this.freezeGameObjects();
-    completeLevel.call(this);
+      this.freezeGameObjects();
+      completeLevel.call(this);
   }
 }
 
@@ -110,10 +114,13 @@ function showRestartButton() {
   .on('pointerdown', () => location.reload());
 }
 
-function scaleAndReposition(fondo) {
-  const newScaleX = game.scale.width / fondo.width;
-  const newScaleY = game.scale.height / fondo.height;
-  fondo.setScale(newScaleX, newScaleY);
+function scaleAndReposition(scene) {
+  const newScaleX = game.scale.width / scene.backgrounds[0].width;
+  const newScaleY = game.scale.height / scene.backgrounds[0].height;
+  
+  scene.backgrounds.forEach(bg => {
+      bg.setScale(newScaleX, newScaleY);
+  });
 
   gameState.player.setPosition(
     (100 / gameConfig.originalWidth) * game.scale.width,

@@ -2,10 +2,14 @@ class BaseLevelScene extends Phaser.Scene {
   constructor(key, levelNumber) {
     super({ key });
     this.levelNumber = levelNumber;
+    this.contactTimers = new Map(); // Para rastrear tiempos de contacto con cada enemigo
+    this.damageThreshold = 700; // 0.7 segundos en milisegundos
   }
 
   preload() {
-    this.load.image('background', '../srcassets/fondo.png');
+    this.load.image('background', '../src/assets/fondo.png');
+    this.load.image('background2', '../src/assets/fondo2.png')
+    this.load.image('background3', '../src/assets/fondo3.png')
     this.load.image('player', '../src/assets/jugador.png');
     this.load.image('trash', '../src/assets/basura.png');
     this.load.image('Cplayer', '../src/assets/Cusuario.png');
@@ -29,9 +33,16 @@ class BaseLevelScene extends Phaser.Scene {
     this.setupResizeHandler();
     this.createPauseMenu();
     this.setupPauseKey();
+    this.updateBackground();
 
     // Colisiones
-    this.physics.add.overlap(gameState.player, gameState.enemies, this.hitByEnemy, null, this);
+    this.physics.add.overlap(
+    gameState.player, 
+    gameState.enemies, 
+    this.startContactTimer, 
+    null, 
+    this
+  );
     this.physics.add.overlap(gameState.player, gameState.trashItems, collectTrash, null, this);
   }
 
@@ -129,6 +140,12 @@ togglePause() {
         this.physics.pause();
         this.pauseMenu.setVisible(true);
         this.tweens.pauseAll();
+        
+        // Limpiar temporizadores de contacto al pausar
+        this.contactTimers.forEach((value, enemy) => {
+            enemy.clearTint();
+        });
+        this.contactTimers.clear();
     } else {
         // Reanudar el juego
         this.physics.resume();
@@ -136,24 +153,59 @@ togglePause() {
         this.tweens.resumeAll();
     }
 }
+setupBackground() {
+  // Crear los fondos en capas (solo el primero visible inicialmente)
+  this.backgrounds = [
+      this.add.image(0, 0, 'background').setOrigin(0, 0),
+      this.add.image(0, 0, 'background2').setOrigin(0, 0),
+      this.add.image(0, 0, 'background3').setOrigin(0, 0)
+  ];
+  
+  // Escalar todos los fondos
+  this.backgrounds.forEach(bg => {
+      bg.setScale(
+          game.scale.width / bg.width,
+          game.scale.height / bg.height
+      );
+      bg.setVisible(false);
+  });
+  
+  // Mostrar solo el primer fondo
+  this.backgrounds[0].setVisible(true);
+  this.currentBackground = 0;
+}
 
-  setupBackground() {
-    this.background = this.add.image(0, 0, 'background').setOrigin(0, 0);
-    this.background.setScale(
-      game.scale.width / this.background.width,
-      game.scale.height / this.background.height
-    );
+updateBackground() {
+  const trashPercentage = gameState.trashCollected / gameConfig.levels[this.levelNumber].trashCount;
+
+  if (trashPercentage > 0.5 && this.currentBackground === 0) {
+    // Cambiar al segundo fondo cuando se recolecta más del 50%
+    this.backgrounds[0].setVisible(false);
+    this.backgrounds[1].setVisible(true);
+    this.currentBackground = 1;
+
+    // Efecto visual de transición
+    this.cameras.main.flash(500, 200, 230, 200);
   }
+  else if (trashPercentage > 0.9 && this.currentBackground === 1) {
+    this.backgrounds[1].setVisible(false);
+    this.backgrounds[2].setVisible(true);
+    this.currentBackground = 2;
+
+    // Efecto visual de transición
+    this.cameras.main.flash(500, 100, 255, 100);
+  }
+}
 
   createPlayer() {
     gameState.player = this.physics.add.sprite(
       (100 / gameConfig.originalWidth) * game.scale.width,
       (560 / gameConfig.originalHeight) * game.scale.height,
       'player'
-    ).setScale((game.scale.width / gameConfig.originalWidth) * 0.5);
+    ).setScale((game.scale.width / gameConfig.originalWidth) * 0.45);
     
     gameState.player.setCollideWorldBounds(true);
-    gameState.player.body.setSize(30, 50, 15, 10);
+    gameState.player.body.setSize(200, 350, 15, 50);
   }
 
   createEnemies() {
@@ -166,7 +218,7 @@ togglePause() {
       const y = Phaser.Math.Between(100, this.scale.height - 100);
       
       const enemy = this.physics.add.sprite(x, y, 'enemy')
-        .setScale(0.25)
+        .setScale(0.20)
         .setCollideWorldBounds(true)
         .setBounce(1);
       
@@ -226,100 +278,124 @@ togglePause() {
   }
 
   setupResizeHandler() {
-    window.addEventListener('resize', () => scaleAndReposition(this.background));
+    window.addEventListener('resize', () => {
+        this.backgrounds.forEach(bg => {
+            bg.setScale(
+                game.scale.width / bg.width,
+                game.scale.height / bg.height
+            );
+        });
+        
+        // Reposicionar otros elementos si es necesario
+        scaleAndReposition(this);
+    });
+}
+
+update() {
+  if (gameState.gameOver || gameState.isPaused) return;
+
+  // Verificar contactos prolongados
+  const currentTime = this.time.now;
+  this.contactTimers.forEach((startTime, enemy) => {
+    const contactDuration = currentTime - startTime;
+    
+    if (contactDuration >= this.damageThreshold) {
+      // Aplicar daño después de 0.7 segundos
+      this.applyDamage(gameState.player, enemy); // Usar gameState.player en lugar de player
+      this.contactTimers.delete(enemy);
+    } else if (!this.physics.overlap(gameState.player, enemy)) { // Usar gameState.player aquí también
+      // Si ya no están en contacto, eliminar el temporizador
+      enemy.clearTint();
+      this.contactTimers.delete(enemy);
+    }
+  });
+  
+  gameState.player.setVelocity(0);
+
+  // Movimiento horizontal
+  if (gameState.cursors.left.isDown) {
+    gameState.player.setVelocityX(-200);
+    gameState.player.setFlipX(true);
+  } 
+  else if (gameState.cursors.right.isDown) {
+    gameState.player.setVelocityX(200);
+    gameState.player.setFlipX(false);
   }
 
-  update() {
-    if (gameState.gameOver || gameState.isPaused) return; // No actualizar si está en pausa
+  // Movimiento vertical
+  if (gameState.cursors.up.isDown) {
+    gameState.player.setVelocityY(-200);
+  } 
+  else if (gameState.cursors.down.isDown) {
+    gameState.player.setVelocityY(200);
+  }
 
-    gameState.player.setVelocity(0);
+  // Movimiento diagonal (combinación de teclas)
+  if (gameState.cursors.left.isDown && gameState.cursors.up.isDown) {
+    gameState.player.setVelocityX(-180);
+    gameState.player.setVelocityY(-180);
+  }
+  if (gameState.cursors.right.isDown && gameState.cursors.up.isDown) {
+    gameState.player.setVelocityX(180);
+    gameState.player.setVelocityY(-180);
+  }
+  if (gameState.cursors.left.isDown && gameState.cursors.down.isDown) {
+    gameState.player.setVelocityX(-180);
+    gameState.player.setVelocityY(180);
+  }
+  if (gameState.cursors.right.isDown && gameState.cursors.down.isDown) {
+    gameState.player.setVelocityX(180);
+    gameState.player.setVelocityY(180);
+  }
 
-    if (gameState.cursors.left.isDown) {
-      gameState.player.setVelocityX(-200);
-    } else if (gameState.cursors.right.isDown) {
-      gameState.player.setVelocityX(200);
+  
+
+  // Efecto de invulnerabilidad
+  if (gameState.isInvulnerable) {
+    gameState.player.alpha = Math.floor(this.time.now / 100) % 2 === 0 ? 0.5 : 1;
+  } else {
+    gameState.player.alpha = 1;
+  }
+}
+
+applyDamage(player, enemy) {
+    if (gameState.isInvulnerable || gameState.gameOver || gameState.isPaused) return;
+
+    // Lógica de daño
+    gameState.lives--;
+    if (gameState.livesContainer.getAt(gameState.lives)) {
+        gameState.livesContainer.getAt(gameState.lives).setVisible(false);
     }
+    
+    // Efectos visuales
+    this.cameras.main.shake(200, 0.01);
+    player.setTint(0xff0000);
+    enemy.setTint(0xff0000);
+    
+    // Limpiar el temporizador de este enemigo
+    this.contactTimers.delete(enemy);
+    
+    // Temporizador para quitar el tinte
+    this.time.delayedCall(200, () => {
+        player.clearTint();
+        enemy.clearTint();
+    });
 
-    if (gameState.cursors.up.isDown) {
-      gameState.player.setVelocityY(-200);
-    } else if (gameState.cursors.down.isDown) {
-      gameState.player.setVelocityY(200);
-    }
+    // Invulnerabilidad temporal
+    gameState.isInvulnerable = true;
+    this.time.delayedCall(gameState.invulnerabilityTime, () => {
+        gameState.isInvulnerable = false;
+    });
 
-    // Efecto de invulnerabilidad
-    if (gameState.isInvulnerable) {
-      gameState.player.alpha = Math.floor(this.time.now / 100) % 2 === 0 ? 0.5 : 1;
-    } else {
-      gameState.player.alpha = 1;
-    }
-
-    if (gameState.gameOver || !gameState.player?.body) return;
-
-    // Reiniciar velocidad
-    gameState.player.setVelocity(0);
-    gameState.player.setFlipX(false); // Resetear flip al inicio
-
-    // Movimiento horizontal
-    if (gameState.cursors.left.isDown) {
-      gameState.player.setVelocityX(-200);
-      gameState.player.setFlipX(true); // Activar modo espejo (mirando izquierda)
-    } 
-    else if (gameState.cursors.right.isDown) {
-      gameState.player.setVelocityX(200);
-      // FlipX false es la posición normal (mirando derecha)
-    }
-
-    // Movimiento vertical (sin rotación, solo movimiento)
-    if (gameState.cursors.up.isDown) {
-      gameState.player.setVelocityY(-200);
-    } 
-    else if (gameState.cursors.down.isDown) {
-      gameState.player.setVelocityY(200);
-    }
-
-    // Movimiento diagonal (combinación de teclas)
-    if (gameState.cursors.left.isDown && gameState.cursors.up.isDown) {
-      gameState.player.setVelocityX(-180); // Reducir velocidad diagonal
-      gameState.player.setVelocityY(-180);
-    }
-    if (gameState.cursors.right.isDown && gameState.cursors.up.isDown) {
-      gameState.player.setVelocityX(180);
-      gameState.player.setVelocityY(-180);
-    }
-    if (gameState.cursors.left.isDown && gameState.cursors.down.isDown) {
-      gameState.player.setVelocityX(-180);
-      gameState.player.setVelocityY(180);
-    }
-    if (gameState.cursors.right.isDown && gameState.cursors.down.isDown) {
-      gameState.player.setVelocityX(180);
-      gameState.player.setVelocityY(180);
+    if (gameState.lives <= 0) {
+        this.gameOver();
     }
 }
 
-  hitByEnemy(player, enemy) {
 
-    if (gameState.isInvulnerable || gameState.isPaused) return;
+hitByEnemy(player, enemy) {
 
-    if (gameState.isInvulnerable) return;
-
-    if (gameState.gameOver || gameState.isInvulnerable) return;
-    
-    gameState.lives--;
-    gameState.livesContainer.getAt(gameState.lives).setVisible(false);
-    
-    this.cameras.main.shake(200, 0.01);
-    player.setTint(0xff0000);
-    this.time.delayedCall(200, () => player.clearTint());
-    
-    gameState.isInvulnerable = true;
-    this.time.delayedCall(gameState.invulnerabilityTime, () => {
-      gameState.isInvulnerable = false;
-    });
-    
-    if (gameState.lives <= 0) {
-      this.gameOver();
-    }
-  }
+}
   
   gameOver() {
     gameState.gameOver = true;
@@ -363,6 +439,21 @@ togglePause() {
     });
   }
 
+startContactTimer(player, enemy) {
+    // No registrar contacto si el juego está pausado
+    if (gameState.isPaused) return;
+    
+    // Si ya está en contacto con este enemigo, no hacer nada
+    if (this.contactTimers.has(enemy)) return;
+
+    // Registrar el momento inicial de contacto
+    this.contactTimers.set(enemy, this.time.now);
+    
+    // Efecto visual de inicio de contacto
+    enemy.setTint(0xffaaaa);
+}
+
+
   freezeGameObjects() {
     // Congelar al jugador
     if (gameState.player && gameState.player.body) {
@@ -383,3 +474,4 @@ togglePause() {
     gameState.gameOver = true; // Esto evitará que el update procese movimientos
   }
 }
+
